@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
+	goredis "github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/zap"
@@ -23,6 +24,7 @@ type Dependencies struct {
 	ProductService  *service.ProductService
 	ActivityService *service.ActivityService
 	SeckillService  *service.SeckillService
+	RedisClient     *goredis.Client
 	JWTManager      *jwtmanager.Manager
 }
 
@@ -75,7 +77,12 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 
 		if dep.SeckillService != nil {
 			seckillHandler := handler.NewSeckillHandler(dep.SeckillService)
-			apiV1.POST("/seckill/activities/:id/attempt", middleware.RequireAuth(dep.JWTManager), seckillHandler.Attempt)
+			seckillRoute := apiV1.Group("/seckill/activities/:id")
+			seckillRoute.Use(middleware.RequireAuth(dep.JWTManager))
+			if dep.RedisClient != nil {
+				seckillRoute.Use(middleware.NewSeckillGuard(dep.RedisClient, dep.Logger).Middleware())
+			}
+			seckillRoute.POST("/attempt", seckillHandler.Attempt)
 		}
 	}
 }

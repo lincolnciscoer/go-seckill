@@ -87,12 +87,13 @@ func buildRouter(
 	activityRepository := repository.NewGormActivityRepository(infra.GormDB)
 	orderRepository := repository.NewSQLOrderRepository(infra.SQLDB)
 	activityCache := cache.NewActivityCache(infra.Redis)
+	orderStatusCache := cache.NewOrderStatusCache(infra.Redis)
 	jwtManager := jwtmanager.NewManager(cfg.JWT)
 	authService := service.NewAuthService(userRepository, jwtManager)
 	productService := service.NewProductService(productRepository)
 	activityService := service.NewActivityService(productRepository, activityRepository, activityCache)
-	orderService := service.NewOrderService(orderRepository)
-	seckillService := service.NewSeckillService(productRepository, activityRepository, orderRepository, activityCache, orderProducer)
+	orderService := service.NewOrderService(orderRepository, orderStatusCache)
+	seckillService := service.NewSeckillService(productRepository, activityRepository, orderRepository, activityCache, orderStatusCache, orderProducer)
 
 	return router.NewEngine(router.Dependencies{
 		Config:          cfg,
@@ -103,6 +104,7 @@ func buildRouter(
 		ProductService:  productService,
 		ActivityService: activityService,
 		SeckillService:  seckillService,
+		RedisClient:     infra.Redis,
 		JWTManager:      jwtManager,
 	})
 }

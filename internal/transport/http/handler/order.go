@@ -28,10 +28,28 @@ func NewOrderHandler(orderService *service.OrderService) *OrderHandler {
 // @Success 200 {object} response.Envelope
 // @Router /api/v1/orders/{orderNo} [get]
 func (h *OrderHandler) Detail(c *gin.Context) {
+	currentUser, ok := httpmiddleware.GetCurrentUser(c)
+	if !ok {
+		httpresponse.Error(c, http.StatusUnauthorized, errs.CodeUnauthorized, "")
+		return
+	}
+
 	order, err := h.orderService.GetByOrderNo(c.Request.Context(), c.Param("orderNo"))
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrOrderNotFound):
+			status, statusErr := h.orderService.GetStatus(c.Request.Context(), c.Param("orderNo"))
+			if statusErr == nil && status.UserID == currentUser.UserID {
+				httpresponse.JSON(c, http.StatusAccepted, errs.CodeOrderProcessing, errs.DefaultMessage(errs.CodeOrderProcessing), OrderStatusResponse{
+					OrderNo:    status.OrderNo,
+					UserID:     status.UserID,
+					ActivityID: status.ActivityID,
+					Status:     status.Status,
+					UpdatedAt:  status.UpdatedAt,
+				})
+				return
+			}
+
 			httpresponse.Error(c, http.StatusNotFound, errs.CodeOrderNotFound, "")
 		default:
 			httpresponse.Error(c, http.StatusInternalServerError, errs.CodeInternalError, "")
@@ -39,8 +57,7 @@ func (h *OrderHandler) Detail(c *gin.Context) {
 		return
 	}
 
-	currentUser, ok := httpmiddleware.GetCurrentUser(c)
-	if !ok || order.UserID != currentUser.UserID {
+	if order.UserID != currentUser.UserID {
 		httpresponse.Error(c, http.StatusUnauthorized, errs.CodeUnauthorized, "order does not belong to current user")
 		return
 	}

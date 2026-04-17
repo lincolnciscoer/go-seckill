@@ -31,6 +31,10 @@ func NewActivityCache(client *goredis.Client) *ActivityCache {
 	}
 }
 
+func (c *ActivityCache) Client() *goredis.Client {
+	return c.client
+}
+
 func (c *ActivityCache) GetActivityList(ctx context.Context) ([]repository.ActivityView, bool, error) {
 	value, err := c.client.Get(ctx, activityListKeyPrefix).Result()
 	if err == goredis.Nil {

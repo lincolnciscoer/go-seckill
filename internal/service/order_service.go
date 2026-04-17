@@ -23,15 +23,17 @@ var (
 )
 
 type OrderService struct {
-	orders repository.OrderRepository
+	orders      repository.OrderRepository
+	statusCache *cache.OrderStatusCache
 }
 
 type SeckillService struct {
-	products   repository.ProductRepository
-	activities repository.ActivityRepository
-	orders     repository.OrderRepository
-	cache      *cache.ActivityCache
-	producer   mq.SeckillOrderProducer
+	products    repository.ProductRepository
+	activities  repository.ActivityRepository
+	orders      repository.OrderRepository
+	cache       *cache.ActivityCache
+	statusCache *cache.OrderStatusCache
+	producer    mq.SeckillOrderProducer
 }
 
 type SeckillAcceptedResult struct {
@@ -41,8 +43,11 @@ type SeckillAcceptedResult struct {
 	QueuedAt  time.Time `json:"queued_at"`
 }
 
-func NewOrderService(orders repository.OrderRepository) *OrderService {
-	return &OrderService{orders: orders}
+func NewOrderService(orders repository.OrderRepository, statusCache *cache.OrderStatusCache) *OrderService {
+	return &OrderService{
+		orders:      orders,
+		statusCache: statusCache,
+	}
 }
 
 func NewSeckillService(
@@ -50,14 +55,16 @@ func NewSeckillService(
 	activities repository.ActivityRepository,
 	orders repository.OrderRepository,
 	activityCache *cache.ActivityCache,
+	statusCache *cache.OrderStatusCache,
 	producer mq.SeckillOrderProducer,
 ) *SeckillService {
 	return &SeckillService{
-		products:   products,
-		activities: activities,
-		orders:     orders,
-		cache:      activityCache,
-		producer:   producer,
+		products:    products,
+		activities:  activities,
+		orders:      orders,
+		cache:       activityCache,
+		statusCache: statusCache,
+		producer:    producer,
 	}
 }
 
@@ -70,11 +77,37 @@ func (s *OrderService) GetByOrderNo(ctx context.Context, orderNo string) (*model
 		return nil, ErrOrderNotFound
 	}
 
+	if s.statusCache != nil {
+		_ = s.statusCache.Set(ctx, cache.OrderStatusPayload{
+			OrderNo:    order.OrderNo,
+			UserID:     order.UserID,
+			ActivityID: order.ActivityID,
+			Status:     "created",
+			UpdatedAt:  time.Now(),
+		})
+	}
+
 	return order, nil
 }
 
 func (s *OrderService) ListByUserID(ctx context.Context, userID uint64) ([]model.Order, error) {
 	return s.orders.ListByUserID(ctx, userID)
+}
+
+func (s *OrderService) GetStatus(ctx context.Context, orderNo string) (*cache.OrderStatusPayload, error) {
+	if s.statusCache == nil {
+		return nil, ErrOrderNotFound
+	}
+
+	status, hit, err := s.statusCache.Get(ctx, orderNo)
+	if err != nil {
+		return nil, err
+	}
+	if !hit {
+		return nil, ErrOrderNotFound
+	}
+
+	return status, nil
 }
 
 // Attempt 在数据库层直接完成库存扣减和订单创建。
@@ -168,7 +201,7 @@ func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID 
 		MessageID: messageID,
 		Status:    "queued",
 		QueuedAt:  time.Now(),
-	}, nil
+	}, s.markQueuedStatus(ctx, orderNo, userID, activity.ID)
 }
 
 func (s *SeckillService) loadActivity(ctx context.Context, activityID uint64) (*repository.ActivityView, error) {
@@ -233,14 +266,20 @@ func generateOrderNo() string {
 }
 
 type AsyncOrderService struct {
-	orders repository.OrderRepository
-	cache  *cache.ActivityCache
+	orders      repository.OrderRepository
+	cache       *cache.ActivityCache
+	statusCache *cache.OrderStatusCache
 }
 
-func NewAsyncOrderService(orders repository.OrderRepository, activityCache *cache.ActivityCache) *AsyncOrderService {
+func NewAsyncOrderService(
+	orders repository.OrderRepository,
+	activityCache *cache.ActivityCache,
+	statusCache *cache.OrderStatusCache,
+) *AsyncOrderService {
 	return &AsyncOrderService{
-		orders: orders,
-		cache:  activityCache,
+		orders:      orders,
+		cache:       activityCache,
+		statusCache: statusCache,
 	}
 }
 
@@ -270,5 +309,29 @@ func (s *AsyncOrderService) HandleSeckillOrder(ctx context.Context, messageID st
 		_ = s.cache.InvalidateActivityViews(ctx, payload.ActivityID)
 	}
 
+	if s.statusCache != nil {
+		_ = s.statusCache.Set(ctx, cache.OrderStatusPayload{
+			OrderNo:    payload.OrderNo,
+			UserID:     payload.UserID,
+			ActivityID: payload.ActivityID,
+			Status:     "created",
+			UpdatedAt:  time.Now(),
+		})
+	}
+
 	return nil
+}
+
+func (s *SeckillService) markQueuedStatus(ctx context.Context, orderNo string, userID uint64, activityID uint64) error {
+	if s.statusCache == nil {
+		return nil
+	}
+
+	return s.statusCache.Set(ctx, cache.OrderStatusPayload{
+		OrderNo:    orderNo,
+		UserID:     userID,
+		ActivityID: activityID,
+		Status:     "queued",
+		UpdatedAt:  time.Now(),
+	})
 }

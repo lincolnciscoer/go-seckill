@@ -114,7 +114,7 @@ func TestSeckillServiceAttemptCreatesOrder(t *testing.T) {
 		},
 	}
 
-	service := NewSeckillService(productRepo, activityRepo, orderRepo, nil, producer)
+	service := NewSeckillService(productRepo, activityRepo, orderRepo, nil, nil, producer)
 
 	result, err := service.Attempt(context.Background(), 99, 10)
 	if err != nil {
@@ -155,6 +155,7 @@ func TestSeckillServiceAttemptRejectsRepeatOrder(t *testing.T) {
 			},
 		},
 		nil,
+		nil,
 		&fakeSeckillProducer{},
 	)
 
@@ -185,6 +186,7 @@ func TestSeckillServiceAttemptRejectsExistingOrderBeforeStockCheck(t *testing.T)
 			},
 		},
 		nil,
+		nil,
 		&fakeSeckillProducer{},
 	)
 
@@ -208,6 +210,7 @@ func TestSeckillServiceAttemptRejectsNotStartedActivity(t *testing.T) {
 			},
 		},
 		&fakeOrderRepository{},
+		nil,
 		nil,
 		&fakeSeckillProducer{},
 	)
@@ -233,6 +236,7 @@ func TestSeckillServiceAttemptRejectsSoldOut(t *testing.T) {
 		},
 		&fakeOrderRepository{},
 		nil,
+		nil,
 		&fakeSeckillProducer{},
 	)
 
@@ -243,7 +247,7 @@ func TestSeckillServiceAttemptRejectsSoldOut(t *testing.T) {
 }
 
 func TestAsyncOrderServiceHandlesDuplicateConsume(t *testing.T) {
-	service := NewAsyncOrderService(&fakeOrderRepository{createErr: repository.ErrDuplicateConsume}, nil)
+	service := NewAsyncOrderService(&fakeOrderRepository{createErr: repository.ErrDuplicateConsume}, nil, nil)
 
 	err := service.HandleSeckillOrder(context.Background(), "msg-1", &mq.SeckillOrderMessage{
 		OrderNo:    "SK1",
@@ -262,7 +266,7 @@ func TestAsyncOrderServiceHandlesDuplicateConsume(t *testing.T) {
 func TestOrderServiceGetByOrderNo(t *testing.T) {
 	service := NewOrderService(&fakeOrderRepository{
 		order: &model.Order{OrderNo: "SK1"},
-	})
+	}, nil)
 
 	order, err := service.GetByOrderNo(context.Background(), "SK1")
 	if err != nil {

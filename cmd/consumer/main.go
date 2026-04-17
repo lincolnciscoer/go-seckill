@@ -39,7 +39,8 @@ func main() {
 
 	orderRepository := repository.NewSQLOrderRepository(infra.SQLDB)
 	activityCache := cache.NewActivityCache(infra.Redis)
-	asyncOrderService := service.NewAsyncOrderService(orderRepository, activityCache)
+	orderStatusCache := cache.NewOrderStatusCache(infra.Redis)
+	asyncOrderService := service.NewAsyncOrderService(orderRepository, activityCache, orderStatusCache)
 
 	consumer, err := rocketmq.NewConsumer(cfg.RocketMQ, appLogger, asyncOrderService)
 	if err != nil {

@@ -56,14 +56,20 @@ func main() {
 	defer resources.Close()
 
 	userRepository := repository.NewGormUserRepository(resources.GormDB)
+	productRepository := repository.NewGormProductRepository(resources.GormDB)
+	activityRepository := repository.NewGormActivityRepository(resources.GormDB)
 	jwtManager := jwtmanager.NewManager(cfg.JWT)
 	authService := service.NewAuthService(userRepository, jwtManager)
+	productService := service.NewProductService(productRepository)
+	activityService := service.NewActivityService(productRepository, activityRepository)
 
 	engine := router.NewEngine(router.Dependencies{
 		Config:         cfg,
 		Logger:         appLogger,
 		HealthCheckers: resources.HealthCheckers,
 		AuthService:    authService,
+		ProductService: productService,
+		ActivityService: activityService,
 		JWTManager:     jwtManager,
 	})
 

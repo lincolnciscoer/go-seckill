@@ -1,5 +1,47 @@
 basePath: /
 definitions:
+  handler.CreateActivityRequest:
+    properties:
+      end_time:
+        type: string
+      name:
+        maxLength: 128
+        minLength: 2
+        type: string
+      product_id:
+        type: integer
+      start_time:
+        type: string
+      status:
+        type: integer
+      total_stock:
+        minimum: 1
+        type: integer
+    required:
+    - end_time
+    - name
+    - product_id
+    - start_time
+    - total_stock
+    type: object
+  handler.CreateProductRequest:
+    properties:
+      description:
+        maxLength: 1000
+        type: string
+      name:
+        maxLength: 128
+        minLength: 2
+        type: string
+      price:
+        minimum: 1
+        type: integer
+      status:
+        type: integer
+    required:
+    - name
+    - price
+    type: object
   handler.DependencyStatus:
     properties:
       message:
@@ -73,6 +115,40 @@ info:
   title: go-seckill API
   version: 0.1.0
 paths:
+  /api/v1/activities:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: 秒杀活动列表
+      tags:
+      - activity
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建秒杀活动请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 创建秒杀活动
+      tags:
+      - activity
   /api/v1/auth/login:
     post:
       consumes:
@@ -129,6 +205,40 @@ paths:
       summary: 当前登录用户信息
       tags:
       - auth
+  /api/v1/products:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: 商品列表
+      tags:
+      - product
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 创建商品请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 创建商品
+      tags:
+      - product
   /healthz:
     get:
       description: 返回当前服务及其关键依赖的健康状态

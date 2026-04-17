@@ -19,6 +19,8 @@ type Dependencies struct {
 	Logger         *zap.Logger
 	HealthCheckers []health.Checker
 	AuthService    *service.AuthService
+	ProductService *service.ProductService
+	ActivityService *service.ActivityService
 	JWTManager     *jwtmanager.Manager
 }
 
@@ -48,6 +50,18 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 		apiV1.POST("/auth/register", authHandler.Register)
 		apiV1.POST("/auth/login", authHandler.Login)
 		apiV1.GET("/me", middleware.RequireAuth(dep.JWTManager), authHandler.Me)
+
+		if dep.ProductService != nil {
+			productHandler := handler.NewProductHandler(dep.ProductService)
+			apiV1.POST("/products", middleware.RequireAuth(dep.JWTManager), productHandler.Create)
+			apiV1.GET("/products", productHandler.List)
+		}
+
+		if dep.ActivityService != nil {
+			activityHandler := handler.NewActivityHandler(dep.ActivityService)
+			apiV1.POST("/activities", middleware.RequireAuth(dep.JWTManager), activityHandler.Create)
+			apiV1.GET("/activities", activityHandler.List)
+		}
 	}
 }
 

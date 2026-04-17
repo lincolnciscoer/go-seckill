@@ -12,12 +12,13 @@ import (
 // Config 是整个应用启动时读取的顶层配置。
 // 这里先覆盖服务启动最需要的配置项，后面接数据库、Redis、MQ 时再继续往里扩展。
 type Config struct {
-	App    AppConfig    `yaml:"app"`
-	Server ServerConfig `yaml:"server"`
-	Log    LogConfig    `yaml:"log"`
-	JWT    JWTConfig    `yaml:"jwt"`
-	MySQL  MySQLConfig  `yaml:"mysql"`
-	Redis  RedisConfig  `yaml:"redis"`
+	App      AppConfig      `yaml:"app"`
+	Server   ServerConfig   `yaml:"server"`
+	Log      LogConfig      `yaml:"log"`
+	JWT      JWTConfig      `yaml:"jwt"`
+	MySQL    MySQLConfig    `yaml:"mysql"`
+	Redis    RedisConfig    `yaml:"redis"`
+	RocketMQ RocketMQConfig `yaml:"rocketmq"`
 }
 
 type AppConfig struct {
@@ -78,6 +79,17 @@ type RedisConfig struct {
 	DB           int    `yaml:"db" env:"GO_SECKILL_REDIS_DB" env-default:"0"`
 	PoolSize     int    `yaml:"pool_size" env:"GO_SECKILL_REDIS_POOL_SIZE" env-default:"20"`
 	MinIdleConns int    `yaml:"min_idle_conns" env:"GO_SECKILL_REDIS_MIN_IDLE_CONNS" env-default:"5"`
+}
+
+type RocketMQConfig struct {
+	Endpoint          string        `yaml:"endpoint" env:"GO_SECKILL_ROCKETMQ_ENDPOINT" env-default:"host.docker.internal:8081"`
+	Topic             string        `yaml:"topic" env:"GO_SECKILL_ROCKETMQ_TOPIC" env-default:"SeckillOrderTopic"`
+	ConsumerGroup     string        `yaml:"consumer_group" env:"GO_SECKILL_ROCKETMQ_CONSUMER_GROUP" env-default:"go-seckill-order-consumer"`
+	AccessKey         string        `yaml:"access_key" env:"GO_SECKILL_ROCKETMQ_ACCESS_KEY" env-default:"local-ak"`
+	AccessSecret      string        `yaml:"access_secret" env:"GO_SECKILL_ROCKETMQ_ACCESS_SECRET" env-default:"local-sk"`
+	AwaitDuration     time.Duration `yaml:"await_duration" env:"GO_SECKILL_ROCKETMQ_AWAIT_DURATION" env-default:"5s"`
+	InvisibleDuration time.Duration `yaml:"invisible_duration" env:"GO_SECKILL_ROCKETMQ_INVISIBLE_DURATION" env-default:"20s"`
+	MaxMessageNum     int32         `yaml:"max_message_num" env:"GO_SECKILL_ROCKETMQ_MAX_MESSAGE_NUM" env-default:"16"`
 }
 
 // Load 负责按“配置文件 -> 环境变量覆盖”的顺序加载配置。

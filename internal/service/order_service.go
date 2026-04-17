@@ -9,6 +9,7 @@ import (
 
 	"go-seckill/internal/cache"
 	"go-seckill/internal/model"
+	"go-seckill/internal/mq"
 	"go-seckill/internal/repository"
 )
 
@@ -30,6 +31,14 @@ type SeckillService struct {
 	activities repository.ActivityRepository
 	orders     repository.OrderRepository
 	cache      *cache.ActivityCache
+	producer   mq.SeckillOrderProducer
+}
+
+type SeckillAcceptedResult struct {
+	OrderNo   string    `json:"order_no"`
+	MessageID string    `json:"message_id"`
+	Status    string    `json:"status"`
+	QueuedAt  time.Time `json:"queued_at"`
 }
 
 func NewOrderService(orders repository.OrderRepository) *OrderService {
@@ -41,12 +50,14 @@ func NewSeckillService(
 	activities repository.ActivityRepository,
 	orders repository.OrderRepository,
 	activityCache *cache.ActivityCache,
+	producer mq.SeckillOrderProducer,
 ) *SeckillService {
 	return &SeckillService{
 		products:   products,
 		activities: activities,
 		orders:     orders,
 		cache:      activityCache,
+		producer:   producer,
 	}
 }
 
@@ -68,7 +79,7 @@ func (s *OrderService) ListByUserID(ctx context.Context, userID uint64) ([]model
 
 // Attempt 在数据库层直接完成库存扣减和订单创建。
 // 这是同步版秒杀闭环：简单、易理解，但高并发下数据库压力会较大，后面我们会用 Redis+Lua+MQ 继续演进。
-func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID uint64) (*model.Order, error) {
+func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID uint64) (*SeckillAcceptedResult, error) {
 	activity, err := s.loadActivity(ctx, activityID)
 	if err != nil {
 		return nil, err
@@ -130,35 +141,34 @@ func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID 
 		return nil, ErrProductMissing
 	}
 
-	order, err := s.orders.CreateSeckillOrder(ctx, repository.CreateSeckillOrderInput{
-		OrderNo:    generateOrderNo(),
+	if s.producer == nil {
+		return nil, fmt.Errorf("seckill order producer is not configured")
+	}
+
+	orderNo := generateOrderNo()
+	messageID, err := s.producer.SendSeckillOrder(ctx, &mq.SeckillOrderMessage{
+		OrderNo:    orderNo,
 		UserID:     userID,
 		ActivityID: activity.ID,
 		ProductID:  product.ID,
 		Quantity:   1,
 		Amount:     product.Price,
 		Status:     model.OrderStatusCreated,
+		CreatedAt:  time.Now(),
 	})
 	if err != nil {
 		if s.cache != nil {
 			_ = s.cache.CompensateSeckill(ctx, activity.ID, userID)
 		}
-
-		switch {
-		case errors.Is(err, repository.ErrDuplicateOrder):
-			return nil, ErrRepeatOrder
-		case errors.Is(err, repository.ErrStockNotEnough):
-			return nil, ErrSoldOut
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 
-	if s.cache != nil {
-		_ = s.cache.InvalidateActivityViews(ctx, activity.ID)
-	}
-
-	return order, nil
+	return &SeckillAcceptedResult{
+		OrderNo:   orderNo,
+		MessageID: messageID,
+		Status:    "queued",
+		QueuedAt:  time.Now(),
+	}, nil
 }
 
 func (s *SeckillService) loadActivity(ctx context.Context, activityID uint64) (*repository.ActivityView, error) {
@@ -220,4 +230,45 @@ func (s *SeckillService) attemptWithRedis(ctx context.Context, activity *reposit
 
 func generateOrderNo() string {
 	return fmt.Sprintf("SK%s%04d", time.Now().Format("20060102150405"), rand.IntN(10000))
+}
+
+type AsyncOrderService struct {
+	orders repository.OrderRepository
+	cache  *cache.ActivityCache
+}
+
+func NewAsyncOrderService(orders repository.OrderRepository, activityCache *cache.ActivityCache) *AsyncOrderService {
+	return &AsyncOrderService{
+		orders: orders,
+		cache:  activityCache,
+	}
+}
+
+func (s *AsyncOrderService) HandleSeckillOrder(ctx context.Context, messageID string, payload *mq.SeckillOrderMessage) error {
+	_, err := s.orders.CreateSeckillOrder(ctx, repository.CreateSeckillOrderInput{
+		MessageID:  messageID,
+		OrderNo:    payload.OrderNo,
+		UserID:     payload.UserID,
+		ActivityID: payload.ActivityID,
+		ProductID:  payload.ProductID,
+		Quantity:   payload.Quantity,
+		Amount:     payload.Amount,
+		Status:     payload.Status,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrDuplicateConsume):
+			return nil
+		case errors.Is(err, repository.ErrDuplicateOrder):
+			return nil
+		default:
+			return err
+		}
+	}
+
+	if s.cache != nil {
+		_ = s.cache.InvalidateActivityViews(ctx, payload.ActivityID)
+	}
+
+	return nil
 }

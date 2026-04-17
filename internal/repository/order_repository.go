@@ -11,11 +11,13 @@ import (
 )
 
 var (
-	ErrDuplicateOrder = errors.New("duplicate order")
-	ErrStockNotEnough = errors.New("stock not enough")
+	ErrDuplicateConsume = errors.New("duplicate consume")
+	ErrDuplicateOrder   = errors.New("duplicate order")
+	ErrStockNotEnough   = errors.New("stock not enough")
 )
 
 type CreateSeckillOrderInput struct {
+	MessageID  string
 	OrderNo    string
 	UserID     uint64
 	ActivityID uint64
@@ -47,11 +49,27 @@ func (r *SQLOrderRepository) CreateSeckillOrder(ctx context.Context, input Creat
 	if err != nil {
 		return nil, err
 	}
+	committed := false
 	defer func() {
-		if err != nil {
+		if !committed {
 			_ = tx.Rollback()
 		}
 	}()
+
+	if input.MessageID != "" {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO mq_consume_logs (
+				message_id, business_key, status, created_at, updated_at
+			) VALUES (?, ?, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
+		`, input.MessageID, input.OrderNo)
+		if err != nil {
+			var mysqlErr *mysqlDriver.MySQLError
+			if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+				return nil, ErrDuplicateConsume
+			}
+			return nil, err
+		}
+	}
 
 	result, err := tx.ExecContext(ctx, `
 		UPDATE seckill_stocks
@@ -96,6 +114,7 @@ func (r *SQLOrderRepository) CreateSeckillOrder(ctx context.Context, input Creat
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	committed = true
 
 	return r.GetByOrderNo(ctx, input.OrderNo)
 }

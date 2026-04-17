@@ -84,6 +84,7 @@ func (s *ActivityService) Create(ctx context.Context, input CreateActivityInput)
 func (s *ActivityService) List(ctx context.Context) ([]repository.ActivityView, error) {
 	if s.cache != nil {
 		if activities, hit, err := s.cache.GetActivityList(ctx); err == nil && hit {
+			s.applyStockSnapshot(ctx, activities)
 			return activities, nil
 		}
 	}
@@ -97,12 +98,14 @@ func (s *ActivityService) List(ctx context.Context) ([]repository.ActivityView, 
 		_ = s.cache.SetActivityList(ctx, activities)
 	}
 
+	s.applyStockSnapshot(ctx, activities)
 	return activities, nil
 }
 
 func (s *ActivityService) GetByID(ctx context.Context, activityID uint64) (*repository.ActivityView, error) {
 	if s.cache != nil {
 		if activity, hit, err := s.cache.GetActivityDetail(ctx, activityID); err == nil && hit {
+			s.applyActivityStock(ctx, activity)
 			return activity, nil
 		}
 	}
@@ -119,6 +122,7 @@ func (s *ActivityService) GetByID(ctx context.Context, activityID uint64) (*repo
 		_ = s.cache.SetActivityDetail(ctx, *activity)
 	}
 
+	s.applyActivityStock(ctx, activity)
 	return activity, nil
 }
 
@@ -143,4 +147,26 @@ func (s *ActivityService) Preheat(ctx context.Context, activityID uint64) error 
 	}
 
 	return nil
+}
+
+func (s *ActivityService) applyStockSnapshot(ctx context.Context, activities []repository.ActivityView) {
+	for idx := range activities {
+		s.applyActivityStock(ctx, &activities[idx])
+	}
+}
+
+func (s *ActivityService) applyActivityStock(ctx context.Context, activity *repository.ActivityView) {
+	if s.cache == nil || activity == nil {
+		return
+	}
+
+	stock, hit, err := s.cache.GetActivityStock(ctx, activity.ID)
+	if err != nil || !hit {
+		return
+	}
+
+	activity.AvailableStock = stock
+	if activity.TotalStock >= stock {
+		activity.SoldStock = activity.TotalStock - stock
+	}
 }

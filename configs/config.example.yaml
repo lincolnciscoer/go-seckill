@@ -37,3 +37,13 @@ redis:
   db: 0
   pool_size: 20
   min_idle_conns: 5
+
+rocketmq:
+  endpoint: host.docker.internal:8081
+  topic: SeckillOrderTopic
+  consumer_group: go-seckill-order-consumer
+  access_key: local-ak
+  access_secret: local-sk
+  await_duration: 5s
+  invisible_duration: 20s
+  max_message_num: 16

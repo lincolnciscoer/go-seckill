@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go-seckill/internal/model"
+	"go-seckill/internal/mq"
 	"go-seckill/internal/repository"
 )
 
@@ -57,6 +58,27 @@ func (r *fakeOrderRepository) ListByUserID(context.Context, uint64) ([]model.Ord
 	return r.listOrders, nil
 }
 
+type fakeSeckillProducer struct {
+	messageID string
+	err       error
+	lastSent  *mq.SeckillOrderMessage
+}
+
+func (p *fakeSeckillProducer) SendSeckillOrder(_ context.Context, message *mq.SeckillOrderMessage) (string, error) {
+	p.lastSent = message
+	if p.err != nil {
+		return "", p.err
+	}
+	if p.messageID == "" {
+		p.messageID = "msg-1"
+	}
+	return p.messageID, nil
+}
+
+func (p *fakeSeckillProducer) Shutdown() error {
+	return nil
+}
+
 type fakeActivityLookupRepository struct {
 	activity *repository.ActivityView
 }
@@ -75,6 +97,7 @@ func (r *fakeActivityLookupRepository) GetByID(context.Context, uint64) (*reposi
 
 func TestSeckillServiceAttemptCreatesOrder(t *testing.T) {
 	orderRepo := &fakeOrderRepository{}
+	producer := &fakeSeckillProducer{}
 	productRepo := &fakeProductRepository{
 		products: map[uint64]*model.Product{
 			1: {ID: 1, Price: 9999},
@@ -91,19 +114,23 @@ func TestSeckillServiceAttemptCreatesOrder(t *testing.T) {
 		},
 	}
 
-	service := NewSeckillService(productRepo, activityRepo, orderRepo, nil)
+	service := NewSeckillService(productRepo, activityRepo, orderRepo, nil, producer)
 
-	order, err := service.Attempt(context.Background(), 99, 10)
+	result, err := service.Attempt(context.Background(), 99, 10)
 	if err != nil {
 		t.Fatalf("attempt: %v", err)
 	}
 
-	if order.UserID != 99 {
-		t.Fatalf("expected user id 99, got %d", order.UserID)
+	if result.Status != "queued" {
+		t.Fatalf("expected queued status, got %q", result.Status)
 	}
 
-	if orderRepo.lastCreateInput.Amount != 9999 {
-		t.Fatalf("expected amount 9999, got %d", orderRepo.lastCreateInput.Amount)
+	if producer.lastSent == nil || producer.lastSent.UserID != 99 {
+		t.Fatalf("expected producer to receive user id 99, got %#v", producer.lastSent)
+	}
+
+	if producer.lastSent.Amount != 9999 {
+		t.Fatalf("expected amount 9999, got %d", producer.lastSent.Amount)
 	}
 }
 
@@ -120,8 +147,15 @@ func TestSeckillServiceAttemptRejectsRepeatOrder(t *testing.T) {
 				AvailableStock: 5,
 			},
 		},
-		&fakeOrderRepository{createErr: repository.ErrDuplicateOrder},
+		&fakeOrderRepository{
+			order: &model.Order{
+				OrderNo:    "SK-repeat",
+				UserID:     1,
+				ActivityID: 10,
+			},
+		},
 		nil,
+		&fakeSeckillProducer{},
 	)
 
 	_, err := service.Attempt(context.Background(), 1, 10)
@@ -151,6 +185,7 @@ func TestSeckillServiceAttemptRejectsExistingOrderBeforeStockCheck(t *testing.T)
 			},
 		},
 		nil,
+		&fakeSeckillProducer{},
 	)
 
 	_, err := service.Attempt(context.Background(), 1, 10)
@@ -174,6 +209,7 @@ func TestSeckillServiceAttemptRejectsNotStartedActivity(t *testing.T) {
 		},
 		&fakeOrderRepository{},
 		nil,
+		&fakeSeckillProducer{},
 	)
 
 	_, err := service.Attempt(context.Background(), 1, 10)
@@ -197,11 +233,29 @@ func TestSeckillServiceAttemptRejectsSoldOut(t *testing.T) {
 		},
 		&fakeOrderRepository{},
 		nil,
+		&fakeSeckillProducer{},
 	)
 
 	_, err := service.Attempt(context.Background(), 1, 10)
 	if err != ErrSoldOut {
 		t.Fatalf("expected ErrSoldOut, got %v", err)
+	}
+}
+
+func TestAsyncOrderServiceHandlesDuplicateConsume(t *testing.T) {
+	service := NewAsyncOrderService(&fakeOrderRepository{createErr: repository.ErrDuplicateConsume}, nil)
+
+	err := service.HandleSeckillOrder(context.Background(), "msg-1", &mq.SeckillOrderMessage{
+		OrderNo:    "SK1",
+		UserID:     1,
+		ActivityID: 10,
+		ProductID:  11,
+		Quantity:   1,
+		Amount:     100,
+		Status:     model.OrderStatusCreated,
+	})
+	if err != nil {
+		t.Fatalf("expected nil error on duplicate consume, got %v", err)
 	}
 }
 

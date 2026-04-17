@@ -1,125 +1,126 @@
 # go-seckill
 
-`go-seckill` 是一个循序渐进实现的 Go 电商秒杀系统后端项目。
+`go-seckill` 是一个按阶段实现的 Go 电商秒杀系统后端项目。
 
-当前阶段目标：
+当前已经完成的核心阶段：
 
-- 初始化 Git 仓库和 Go 模块
-- 跑通最小 Gin 服务，并逐步补齐工程基础设施
-- 提供基础健康检查接口 `GET /healthz`
-- 接入配置系统、结构化日志、优雅退出和 Swagger 骨架
-- 接入 MySQL 和 Redis 本地开发环境
-- 为后续鉴权、秒杀、缓存、消息队列等模块预留清晰目录结构
+1. 仓库初始化与最小 Gin 服务
+2. 配置、日志、优雅退出、Swagger
+3. MySQL / Redis 本地环境与健康检查
+4. 账号密码登录与 JWT 鉴权
+5. 商品与秒杀活动管理
+6. 活动预热与缓存化查询
+7. 订单领域与同步版秒杀闭环
+8. Redis Lua 秒杀准入与库存预扣减
+9. RocketMQ 异步下单与消费幂等
 
-## 当前目录结构
+## 当前技术栈
+
+- Go
+- Gin
+- GORM
+- MySQL
+- Redis
+- Lua
+- RocketMQ
+- JWT
+- Swagger
+- Docker Compose
+
+## 当前项目结构
 
 ```text
 .
 |-- cmd
-|   `-- api
+|   |-- api
+|   |   `-- main.go
+|   `-- consumer
 |       `-- main.go
 |-- configs
 |   `-- config.example.yaml
-|-- docs
-|   |-- local-dev.md
-|   `-- commit-notes
-|       `-- 01-初始化仓库并跑通最小服务.md
-|       `-- 02-接入配置系统日志优雅退出和Swagger骨架.md
-|       `-- 03-接入MySQL和Redis本地开发环境.md
-|-- docs/swagger
 |-- deploy
 |   `-- mysql
 |       `-- init
 |           `-- 001_init.sql
+|-- docs
+|   |-- commit-notes
+|   `-- local-dev.md
 |-- internal
+|   |-- bootstrap
+|   |-- cache
 |   |-- config
-|   |   |-- config.go
-|   |   `-- config_test.go
 |   |-- errs
-|   |   `-- code.go
 |   |-- health
-|   |   `-- checker.go
+|   |-- model
+|   |-- mq
+|   |-- repository
+|   |-- security
+|   |-- service
 |   |-- store
-|   |   |-- mysql
-|   |   |   |-- client.go
-|   |   |   `-- health.go
-|   |   `-- redis
-|   |       |-- client.go
-|   |       `-- health.go
-|-- internal
 |   `-- transport
-|       `-- http
-|           |-- handler
-|           |   |-- health.go
-|           |   `-- health_test.go
-|           |-- middleware
-|           |   |-- access_log.go
-|           |   `-- recovery.go
-|           |-- response
-|           |   `-- response.go
-|           `-- router
-|               `-- router.go
 |-- .env.example
-|-- docker-compose.yml
-`-- pkg
-    `-- logger
-        `-- logger.go
+`-- docker-compose.yml
 ```
 
 ## 快速开始
 
-1. 安装 Go 1.26+
-2. 在项目根目录执行：
+1. 启动依赖：
 
 ```bash
 docker compose --env-file .env.example up -d
+```
+
+2. 初始化 RocketMQ Topic 和 Consumer Group：
+
+```bash
+docker exec go-seckill-rmq-broker sh mqadmin updatetopic -n rocketmq-namesrv:9876 -c DefaultCluster -t SeckillOrderTopic
+docker exec go-seckill-rmq-broker sh mqadmin updateSubGroup -n rocketmq-namesrv:9876 -c DefaultCluster -g go-seckill-order-consumer
+```
+
+3. 启动 API：
+
+```bash
 go run ./cmd/api
 ```
 
-3. 打开浏览器或使用 curl 访问：
+4. 启动异步订单消费者：
 
 ```bash
-curl http://127.0.0.1:8080/healthz
+go run ./cmd/consumer
 ```
 
-预期返回：
-
-```json
-{
-  "code": "OK",
-  "message": "success",
-  "data": {
-    "status": "ok",
-    "service": "go-seckill",
-    "time": "2026-01-01T00:00:00Z",
-    "dependencies": [
-      {
-        "name": "mysql",
-        "status": "up"
-      },
-      {
-        "name": "redis",
-        "status": "up"
-      }
-    ]
-  }
-}
-```
-
-4. 查看 Swagger 文档：
+5. 打开 Swagger：
 
 ```text
 http://127.0.0.1:8080/swagger/index.html
 ```
 
-## 学习路线
+更多本地运行说明见 [docs/local-dev.md](C:/Users/TY/Desktop/tyai/go-seckill/docs/local-dev.md)。
 
-这个项目会采用“每次只实现一小块”的方式推进：
+## 关键接口
 
-1. 先把基础服务骨架搭起来
-2. 再接配置、日志、Swagger
-3. 再接入 MySQL、Redis
-4. 再实现登录、商品、活动、订单、秒杀主链路
-5. 最后补监控、链路追踪、压测和项目展示材料
+- `GET /healthz`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/me`
+- `POST /api/v1/products`
+- `GET /api/v1/products`
+- `POST /api/v1/activities`
+- `GET /api/v1/activities`
+- `GET /api/v1/activities/:id`
+- `POST /api/v1/activities/:id/preheat`
+- `POST /api/v1/seckill/activities/:id/attempt`
+- `GET /api/v1/orders/:orderNo`
+- `GET /api/v1/orders/me`
 
-每次提交都会在 `docs/commit-notes/` 下配一篇教学型文档，帮助你理解本次为什么这么做、怎么测试、你应该学会什么。
+## 学习方式
+
+这个项目按“每次只实现一小块”的节奏推进。
+
+每次提交都会在 `docs/commit-notes/` 下附一篇教学型文档，说明：
+
+- 本次目标
+- 做了什么
+- 为什么这么做
+- 如何测试
+- 这一步你应该掌握什么

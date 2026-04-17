@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go-seckill/internal/repository"
@@ -93,6 +94,23 @@ func (c *ActivityCache) InvalidateActivity(ctx context.Context, activityID uint6
 		activityDetailKey(activityID),
 		activityStockKey(activityID),
 	).Err()
+}
+
+func (c *ActivityCache) GetActivityStock(ctx context.Context, activityID uint64) (int, bool, error) {
+	value, err := c.client.Get(ctx, activityStockKey(activityID)).Result()
+	if err == goredis.Nil {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+
+	stock, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false, err
+	}
+
+	return stock, true, nil
 }
 
 func activityDetailKey(activityID uint64) string {

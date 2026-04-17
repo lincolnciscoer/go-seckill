@@ -32,8 +32,7 @@ go run ./cmd/api
 
 说明：
 
-- 当前默认配置针对 Windows + Docker Desktop 调整了 MySQL 主机为 `host.docker.internal`
-- Redis 仍然使用 `127.0.0.1:6379`
+- 当前默认配置针对 Windows + Docker Desktop 调整了 MySQL 和 Redis 主机为 `host.docker.internal`
 
 ## 验证服务与依赖
 

@@ -26,6 +26,7 @@ type ActivityView struct {
 type ActivityRepository interface {
 	CreateWithStock(ctx context.Context, activity *model.SeckillActivity, stock *model.SeckillStock) error
 	List(ctx context.Context) ([]ActivityView, error)
+	GetByID(ctx context.Context, id uint64) (*ActivityView, error)
 }
 
 type GormActivityRepository struct {
@@ -67,6 +68,35 @@ func (r *GormActivityRepository) List(ctx context.Context) ([]ActivityView, erro
 		Order("a.id DESC").
 		Scan(&views).Error
 	return views, err
+}
+
+func (r *GormActivityRepository) GetByID(ctx context.Context, id uint64) (*ActivityView, error) {
+	var view ActivityView
+	err := r.db.WithContext(ctx).
+		Table("seckill_activities AS a").
+		Select(`
+			a.id,
+			a.product_id,
+			a.name,
+			a.start_time,
+			a.end_time,
+			a.status,
+			a.created_at,
+			COALESCE(s.total_stock, 0) AS total_stock,
+			COALESCE(s.available_stock, 0) AS available_stock,
+			COALESCE(s.sold_stock, 0) AS sold_stock
+		`).
+		Joins("LEFT JOIN seckill_stocks AS s ON s.activity_id = a.id").
+		Where("a.id = ?", id).
+		Take(&view).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &view, nil
 }
 
 func IsRecordNotFound(err error) bool {

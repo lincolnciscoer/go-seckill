@@ -32,7 +32,7 @@ mysql:
   conn_max_lifetime: 30m
 
 redis:
-  addr: 127.0.0.1:6379
+  addr: host.docker.internal:6379
   password: ""
   db: 0
   pool_size: 20

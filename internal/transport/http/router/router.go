@@ -60,7 +60,9 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 		if dep.ActivityService != nil {
 			activityHandler := handler.NewActivityHandler(dep.ActivityService)
 			apiV1.POST("/activities", middleware.RequireAuth(dep.JWTManager), activityHandler.Create)
+			apiV1.POST("/activities/:id/preheat", middleware.RequireAuth(dep.JWTManager), activityHandler.Preheat)
 			apiV1.GET("/activities", activityHandler.List)
+			apiV1.GET("/activities/:id", activityHandler.Detail)
 		}
 	}
 }

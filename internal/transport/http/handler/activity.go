@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -82,4 +83,58 @@ func (h *ActivityHandler) List(c *gin.Context) {
 	}
 
 	httpresponse.Success(c, activities)
+}
+
+// Detail godoc
+// @Summary 秒杀活动详情
+// @Tags activity
+// @Produce json
+// @Success 200 {object} response.Envelope
+// @Router /api/v1/activities/{id} [get]
+func (h *ActivityHandler) Detail(c *gin.Context) {
+	activityID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		httpresponse.Error(c, http.StatusBadRequest, errs.CodeBadRequest, "invalid activity id")
+		return
+	}
+
+	activity, err := h.activityService.GetByID(c.Request.Context(), activityID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrActivityNotFound):
+			httpresponse.Error(c, http.StatusBadRequest, errs.CodeBadRequest, "activity does not exist")
+		default:
+			httpresponse.Error(c, http.StatusInternalServerError, errs.CodeInternalError, "")
+		}
+		return
+	}
+
+	httpresponse.Success(c, activity)
+}
+
+// Preheat godoc
+// @Summary 预热秒杀活动缓存
+// @Tags activity
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} response.Envelope
+// @Router /api/v1/activities/{id}/preheat [post]
+func (h *ActivityHandler) Preheat(c *gin.Context) {
+	activityID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		httpresponse.Error(c, http.StatusBadRequest, errs.CodeBadRequest, "invalid activity id")
+		return
+	}
+
+	if err := h.activityService.Preheat(c.Request.Context(), activityID); err != nil {
+		switch {
+		case errors.Is(err, service.ErrActivityNotFound):
+			httpresponse.Error(c, http.StatusBadRequest, errs.CodeBadRequest, "activity does not exist")
+		default:
+			httpresponse.Error(c, http.StatusInternalServerError, errs.CodeInternalError, "")
+		}
+		return
+	}
+
+	httpresponse.Success(c, gin.H{"preheated": true, "activity_id": activityID})
 }

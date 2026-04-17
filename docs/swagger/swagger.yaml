@@ -149,6 +149,32 @@ paths:
       summary: 创建秒杀活动
       tags:
       - activity
+  /api/v1/activities/{id}:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: 秒杀活动详情
+      tags:
+      - activity
+  /api/v1/activities/{id}/preheat:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 预热秒杀活动缓存
+      tags:
+      - activity
   /api/v1/auth/login:
     post:
       consumes:

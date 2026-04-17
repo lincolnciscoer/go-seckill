@@ -38,10 +38,15 @@ func (r *fakeActivityRepository) List(context.Context) ([]repository.ActivityVie
 	return nil, nil
 }
 
+func (r *fakeActivityRepository) GetByID(context.Context, uint64) (*repository.ActivityView, error) {
+	return nil, nil
+}
+
 func TestActivityServiceRejectsInvalidTimeWindow(t *testing.T) {
 	service := NewActivityService(
 		&fakeProductRepository{products: map[uint64]*model.Product{1: {ID: 1}}},
 		&fakeActivityRepository{},
+		nil,
 	)
 
 	now := time.Now()
@@ -61,6 +66,7 @@ func TestActivityServiceRejectsMissingProduct(t *testing.T) {
 	service := NewActivityService(
 		&fakeProductRepository{products: map[uint64]*model.Product{}},
 		&fakeActivityRepository{},
+		nil,
 	)
 
 	err := service.Create(context.Background(), CreateActivityInput{

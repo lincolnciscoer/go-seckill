@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	_ "go-seckill/docs/swagger"
+	"go-seckill/internal/cache"
 	"go-seckill/internal/config"
 	"go-seckill/internal/health"
 	mysqlstore "go-seckill/internal/store/mysql"
@@ -58,10 +59,11 @@ func main() {
 	userRepository := repository.NewGormUserRepository(resources.GormDB)
 	productRepository := repository.NewGormProductRepository(resources.GormDB)
 	activityRepository := repository.NewGormActivityRepository(resources.GormDB)
+	activityCache := cache.NewActivityCache(resources.Redis)
 	jwtManager := jwtmanager.NewManager(cfg.JWT)
 	authService := service.NewAuthService(userRepository, jwtManager)
 	productService := service.NewProductService(productRepository)
-	activityService := service.NewActivityService(productRepository, activityRepository)
+	activityService := service.NewActivityService(productRepository, activityRepository, activityCache)
 
 	engine := router.NewEngine(router.Dependencies{
 		Config:         cfg,

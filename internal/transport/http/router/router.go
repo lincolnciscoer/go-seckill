@@ -7,13 +7,15 @@ import (
 	"go.uber.org/zap"
 
 	"go-seckill/internal/config"
+	"go-seckill/internal/health"
 	"go-seckill/internal/transport/http/handler"
 	"go-seckill/internal/transport/http/middleware"
 )
 
 type Dependencies struct {
-	Config *config.Config
-	Logger *zap.Logger
+	Config         *config.Config
+	Logger         *zap.Logger
+	HealthCheckers []health.Checker
 }
 
 // NewEngine 负责集中管理 HTTP 路由注册。
@@ -34,7 +36,7 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 		serviceName = dep.Config.App.Name
 	}
 
-	engine.GET("/healthz", handler.NewHealthHandler(serviceName))
+	engine.GET("/healthz", handler.NewHealthHandler(serviceName, dep.HealthCheckers...))
 }
 
 func registerDocsRoutes(engine *gin.Engine) {

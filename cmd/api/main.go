@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,10 +12,15 @@ import (
 
 	_ "go-seckill/docs/swagger"
 	"go-seckill/internal/config"
+	"go-seckill/internal/health"
+	mysqlstore "go-seckill/internal/store/mysql"
+	redisstore "go-seckill/internal/store/redis"
 	"go-seckill/internal/transport/http/router"
 	"go-seckill/pkg/logger"
 
+	goredis "github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // @title go-seckill API
@@ -37,9 +43,16 @@ func main() {
 		_ = appLogger.Sync()
 	}()
 
+	resources, err := initInfrastructure(cfg, appLogger)
+	if err != nil {
+		appLogger.Fatal("failed to initialize infrastructure", zap.Error(err))
+	}
+	defer resources.Close()
+
 	engine := router.NewEngine(router.Dependencies{
-		Config: cfg,
-		Logger: appLogger,
+		Config:         cfg,
+		Logger:         appLogger,
+		HealthCheckers: resources.HealthCheckers,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -91,5 +104,60 @@ func newHTTPServer(addr string, cfg *config.Config, handler http.Handler) *http.
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+}
+
+type infrastructure struct {
+	GormDB         *gorm.DB
+	SQLDB          *sql.DB
+	Redis          *goredis.Client
+	HealthCheckers []health.Checker
+}
+
+func initInfrastructure(cfg *config.Config, logger *zap.Logger) (*infrastructure, error) {
+	gormDB, sqlDB, err := mysqlstore.New(cfg.MySQL)
+	if err != nil {
+		return nil, err
+	}
+
+	logger.Info("mysql connected",
+		zap.String("host", cfg.MySQL.Host),
+		zap.Int("port", cfg.MySQL.Port),
+		zap.String("database", cfg.MySQL.Database),
+	)
+
+	redisClient, err := redisstore.New(cfg.Redis)
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, err
+	}
+
+	logger.Info("redis connected",
+		zap.String("addr", cfg.Redis.Addr),
+		zap.Int("db", cfg.Redis.DB),
+	)
+
+	return &infrastructure{
+		GormDB: gormDB,
+		SQLDB:  sqlDB,
+		Redis:  redisClient,
+		HealthCheckers: []health.Checker{
+			mysqlstore.NewHealthChecker(sqlDB),
+			redisstore.NewHealthChecker(redisClient),
+		},
+	}, nil
+}
+
+func (i *infrastructure) Close() {
+	if i == nil {
+		return
+	}
+
+	if i.Redis != nil {
+		_ = i.Redis.Close()
+	}
+
+	if i.SQLDB != nil {
+		_ = i.SQLDB.Close()
 	}
 }

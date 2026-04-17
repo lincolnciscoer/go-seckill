@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/healthz": {
             "get": {
-                "description": "返回当前服务的基础健康状态",
+                "description": "返回当前服务及其关键依赖的健康状态",
                 "produces": [
                     "application/json"
                 ],
@@ -31,15 +31,41 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/handler.HealthSuccessResponse"
                         }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/handler.HealthSuccessResponse"
+                        }
                     }
                 }
             }
         }
     },
     "definitions": {
+        "handler.DependencyStatus": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.HealthData": {
             "type": "object",
             "properties": {
+                "dependencies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handler.DependencyStatus"
+                    }
+                },
                 "service": {
                     "type": "string"
                 },

@@ -8,6 +8,7 @@
 - 跑通最小 Gin 服务，并逐步补齐工程基础设施
 - 提供基础健康检查接口 `GET /healthz`
 - 接入配置系统、结构化日志、优雅退出和 Swagger 骨架
+- 接入 MySQL 和 Redis 本地开发环境
 - 为后续鉴权、秒杀、缓存、消息队列等模块预留清晰目录结构
 
 ## 当前目录结构
@@ -20,16 +21,32 @@
 |-- configs
 |   `-- config.example.yaml
 |-- docs
+|   |-- local-dev.md
 |   `-- commit-notes
 |       `-- 01-初始化仓库并跑通最小服务.md
 |       `-- 02-接入配置系统日志优雅退出和Swagger骨架.md
+|       `-- 03-接入MySQL和Redis本地开发环境.md
 |-- docs/swagger
+|-- deploy
+|   `-- mysql
+|       `-- init
+|           `-- 001_init.sql
 |-- internal
 |   |-- config
 |   |   |-- config.go
 |   |   `-- config_test.go
 |   |-- errs
 |   |   `-- code.go
+|   |-- health
+|   |   `-- checker.go
+|   |-- store
+|   |   |-- mysql
+|   |   |   |-- client.go
+|   |   |   `-- health.go
+|   |   `-- redis
+|   |       |-- client.go
+|   |       `-- health.go
+|-- internal
 |   `-- transport
 |       `-- http
 |           |-- handler
@@ -42,6 +59,8 @@
 |           |   `-- response.go
 |           `-- router
 |               `-- router.go
+|-- .env.example
+|-- docker-compose.yml
 `-- pkg
     `-- logger
         `-- logger.go
@@ -53,7 +72,7 @@
 2. 在项目根目录执行：
 
 ```bash
-go mod tidy
+docker compose --env-file .env.example up -d
 go run ./cmd/api
 ```
 
@@ -72,7 +91,17 @@ curl http://127.0.0.1:8080/healthz
   "data": {
     "status": "ok",
     "service": "go-seckill",
-    "time": "2026-01-01T00:00:00Z"
+    "time": "2026-01-01T00:00:00Z",
+    "dependencies": [
+      {
+        "name": "mysql",
+        "status": "up"
+      },
+      {
+        "name": "redis",
+        "status": "up"
+      }
+    ]
   }
 }
 ```

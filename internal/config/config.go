@@ -15,6 +15,8 @@ type Config struct {
 	App    AppConfig    `yaml:"app"`
 	Server ServerConfig `yaml:"server"`
 	Log    LogConfig    `yaml:"log"`
+	MySQL  MySQLConfig  `yaml:"mysql"`
+	Redis  RedisConfig  `yaml:"redis"`
 }
 
 type AppConfig struct {
@@ -33,6 +35,42 @@ type ServerConfig struct {
 type LogConfig struct {
 	Level       string `yaml:"level" env:"GO_SECKILL_LOG_LEVEL" env-default:"info"`
 	Development bool   `yaml:"development" env:"GO_SECKILL_LOG_DEVELOPMENT" env-default:"true"`
+}
+
+type MySQLConfig struct {
+	Host            string        `yaml:"host" env:"GO_SECKILL_MYSQL_HOST" env-default:"127.0.0.1"`
+	Port            int           `yaml:"port" env:"GO_SECKILL_MYSQL_PORT" env-default:"3306"`
+	User            string        `yaml:"user" env:"GO_SECKILL_MYSQL_USER" env-default:"go_seckill"`
+	Password        string        `yaml:"password" env:"GO_SECKILL_MYSQL_PASSWORD" env-default:"go_seckill123"`
+	Database        string        `yaml:"database" env:"GO_SECKILL_MYSQL_DATABASE" env-default:"go_seckill"`
+	Charset         string        `yaml:"charset" env:"GO_SECKILL_MYSQL_CHARSET" env-default:"utf8mb4"`
+	ParseTime       bool          `yaml:"parse_time" env:"GO_SECKILL_MYSQL_PARSE_TIME" env-default:"true"`
+	Loc             string        `yaml:"loc" env:"GO_SECKILL_MYSQL_LOC" env-default:"Local"`
+	MaxOpenConns    int           `yaml:"max_open_conns" env:"GO_SECKILL_MYSQL_MAX_OPEN_CONNS" env-default:"20"`
+	MaxIdleConns    int           `yaml:"max_idle_conns" env:"GO_SECKILL_MYSQL_MAX_IDLE_CONNS" env-default:"10"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime" env:"GO_SECKILL_MYSQL_CONN_MAX_LIFETIME" env-default:"30m"`
+}
+
+func (c MySQLConfig) DSN() string {
+	return fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=%t&loc=%s",
+		c.User,
+		c.Password,
+		c.Host,
+		c.Port,
+		c.Database,
+		c.Charset,
+		c.ParseTime,
+		c.Loc,
+	)
+}
+
+type RedisConfig struct {
+	Addr         string `yaml:"addr" env:"GO_SECKILL_REDIS_ADDR" env-default:"127.0.0.1:6379"`
+	Password     string `yaml:"password" env:"GO_SECKILL_REDIS_PASSWORD"`
+	DB           int    `yaml:"db" env:"GO_SECKILL_REDIS_DB" env-default:"0"`
+	PoolSize     int    `yaml:"pool_size" env:"GO_SECKILL_REDIS_POOL_SIZE" env-default:"20"`
+	MinIdleConns int    `yaml:"min_idle_conns" env:"GO_SECKILL_REDIS_MIN_IDLE_CONNS" env-default:"5"`
 }
 
 // Load 负责按“配置文件 -> 环境变量覆盖”的顺序加载配置。

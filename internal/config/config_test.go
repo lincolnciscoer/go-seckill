@@ -29,6 +29,10 @@ server:
   port: 8088
 log:
   level: warn
+mysql:
+  host: mysql-from-file
+redis:
+  addr: redis-from-file:6379
 `)
 
 	if err := os.WriteFile(configFile, content, 0o600); err != nil {
@@ -53,5 +57,13 @@ log:
 
 	if cfg.Log.Level != "warn" {
 		t.Fatalf("expected log level to come from file, got %q", cfg.Log.Level)
+	}
+
+	if cfg.MySQL.Host != "mysql-from-file" {
+		t.Fatalf("expected mysql host to come from file, got %q", cfg.MySQL.Host)
+	}
+
+	if cfg.Redis.Addr != "redis-from-file:6379" {
+		t.Fatalf("expected redis addr to come from file, got %q", cfg.Redis.Addr)
 	}
 }

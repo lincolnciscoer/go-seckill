@@ -15,13 +15,15 @@ import (
 )
 
 type Dependencies struct {
-	Config         *config.Config
-	Logger         *zap.Logger
-	HealthCheckers []health.Checker
-	AuthService    *service.AuthService
-	ProductService *service.ProductService
+	Config          *config.Config
+	Logger          *zap.Logger
+	HealthCheckers  []health.Checker
+	AuthService     *service.AuthService
+	OrderService    *service.OrderService
+	ProductService  *service.ProductService
 	ActivityService *service.ActivityService
-	JWTManager     *jwtmanager.Manager
+	SeckillService  *service.SeckillService
+	JWTManager      *jwtmanager.Manager
 }
 
 // NewEngine 负责集中管理 HTTP 路由注册。
@@ -63,6 +65,17 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 			apiV1.POST("/activities/:id/preheat", middleware.RequireAuth(dep.JWTManager), activityHandler.Preheat)
 			apiV1.GET("/activities", activityHandler.List)
 			apiV1.GET("/activities/:id", activityHandler.Detail)
+		}
+
+		if dep.OrderService != nil {
+			orderHandler := handler.NewOrderHandler(dep.OrderService)
+			apiV1.GET("/orders/me", middleware.RequireAuth(dep.JWTManager), orderHandler.ListMine)
+			apiV1.GET("/orders/:orderNo", middleware.RequireAuth(dep.JWTManager), orderHandler.Detail)
+		}
+
+		if dep.SeckillService != nil {
+			seckillHandler := handler.NewSeckillHandler(dep.SeckillService)
+			apiV1.POST("/seckill/activities/:id/attempt", middleware.RequireAuth(dep.JWTManager), seckillHandler.Attempt)
 		}
 	}
 }

@@ -86,6 +86,15 @@ func (c *ActivityCache) SetActivityDetail(ctx context.Context, activity reposito
 	return c.client.Set(ctx, activityStockKey(activity.ID), activity.AvailableStock, c.ttl).Err()
 }
 
+func (c *ActivityCache) InvalidateActivity(ctx context.Context, activityID uint64) error {
+	return c.client.Del(
+		ctx,
+		activityListKeyPrefix,
+		activityDetailKey(activityID),
+		activityStockKey(activityID),
+	).Err()
+}
+
 func activityDetailKey(activityID uint64) string {
 	return fmt.Sprintf("%s%d", activityDetailKeyPrefix, activityID)
 }

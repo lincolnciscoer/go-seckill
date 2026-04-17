@@ -70,7 +70,15 @@ func (s *ActivityService) Create(ctx context.Context, input CreateActivityInput)
 		SoldStock:      0,
 	}
 
-	return s.activities.CreateWithStock(ctx, activity, stock)
+	if err := s.activities.CreateWithStock(ctx, activity, stock); err != nil {
+		return err
+	}
+
+	if s.cache != nil {
+		_ = s.cache.InvalidateActivity(ctx, activity.ID)
+	}
+
+	return nil
 }
 
 func (s *ActivityService) List(ctx context.Context) ([]repository.ActivityView, error) {

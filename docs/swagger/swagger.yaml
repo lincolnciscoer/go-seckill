@@ -231,6 +231,34 @@ paths:
       summary: 当前登录用户信息
       tags:
       - auth
+  /api/v1/orders/{orderNo}:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 订单详情
+      tags:
+      - order
+  /api/v1/orders/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 当前用户订单列表
+      tags:
+      - order
   /api/v1/products:
     get:
       produces:
@@ -265,6 +293,20 @@ paths:
       summary: 创建商品
       tags:
       - product
+  /api/v1/seckill/activities/{id}/attempt:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 发起同步版秒杀
+      tags:
+      - seckill
   /healthz:
     get:
       description: 返回当前服务及其关键依赖的健康状态

@@ -9,6 +9,7 @@ import (
 
 	"go-seckill/internal/config"
 	"go-seckill/internal/health"
+	"go-seckill/internal/observability"
 	jwtmanager "go-seckill/internal/security/jwt"
 	"go-seckill/internal/service"
 	"go-seckill/internal/transport/http/handler"
@@ -18,6 +19,7 @@ import (
 type Dependencies struct {
 	Config          *config.Config
 	Logger          *zap.Logger
+	ServiceName     string
 	HealthCheckers  []health.Checker
 	AuthService     *service.AuthService
 	OrderService    *service.OrderService
@@ -32,10 +34,14 @@ type Dependencies struct {
 // 项目后面功能变多之后，路由会按模块继续拆分，但统一入口最好从一开始就固定下来。
 func NewEngine(dep Dependencies) *gin.Engine {
 	engine := gin.New()
-	engine.Use(middleware.AccessLogger(dep.Logger), middleware.Recovery(dep.Logger))
+	if dep.Config != nil {
+		engine.Use(observability.GinTraceMiddleware(dep.ServiceName, dep.Config.Observability))
+	}
+	engine.Use(observability.HTTPMetricsMiddleware(), middleware.AccessLogger(dep.Logger), middleware.Recovery(dep.Logger))
 
 	registerBaseRoutes(engine, dep)
 	registerDocsRoutes(engine)
+	registerObservabilityRoutes(engine, dep)
 
 	return engine
 }
@@ -89,4 +95,17 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 
 func registerDocsRoutes(engine *gin.Engine) {
 	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+}
+
+func registerObservabilityRoutes(engine *gin.Engine, dep Dependencies) {
+	metricsPath := "/metrics"
+	if dep.Config != nil && dep.Config.Observability.MetricsPath != "" {
+		metricsPath = dep.Config.Observability.MetricsPath
+	}
+
+	engine.GET(metricsPath, gin.WrapH(observability.MetricsHandler()))
+
+	if dep.Config == nil || dep.Config.Observability.PprofEnabled {
+		observability.RegisterPprofRoutes(engine)
+	}
 }

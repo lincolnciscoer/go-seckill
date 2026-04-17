@@ -38,6 +38,15 @@ redis:
   pool_size: 20
   min_idle_conns: 5
 
+observability:
+  metrics_path: /metrics
+  consumer_port: 19090
+  pprof_enabled: true
+  trace_enabled: true
+  trace_endpoint: host.docker.internal:4317
+  trace_insecure: true
+  trace_sample_ratio: 1
+
 rocketmq:
   endpoint: host.docker.internal:8081
   topic: SeckillOrderTopic

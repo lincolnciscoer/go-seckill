@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,6 +11,7 @@ import (
 	"go-seckill/internal/bootstrap"
 	"go-seckill/internal/cache"
 	"go-seckill/internal/mq/rocketmq"
+	"go-seckill/internal/observability"
 	"go-seckill/internal/repository"
 	"go-seckill/internal/service"
 
@@ -29,6 +32,14 @@ func main() {
 	}
 	defer func() {
 		_ = appLogger.Sync()
+	}()
+
+	traceShutdown, err := observability.SetupTracing(context.Background(), cfg.App.Name+"-consumer", cfg.Observability, appLogger)
+	if err != nil {
+		appLogger.Fatal("failed to initialize tracing", zap.Error(err))
+	}
+	defer func() {
+		_ = traceShutdown(context.Background())
 	}()
 
 	infra, err := bootstrap.InitInfrastructure(cfg, appLogger)
@@ -53,15 +64,30 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	metricsServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Observability.ConsumerPort),
+		Handler: observability.NewServeMux(cfg.Observability),
+	}
+	defer func() {
+		_ = metricsServer.Shutdown(context.Background())
+	}()
+
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
 			appLogger.Fatal("rocketmq consumer stopped unexpectedly", zap.Error(err))
 		}
 	}()
 
+	go func() {
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			appLogger.Fatal("consumer metrics server stopped unexpectedly", zap.Error(err))
+		}
+	}()
+
 	appLogger.Info("rocketmq consumer started",
 		zap.String("topic", cfg.RocketMQ.Topic),
 		zap.String("consumer_group", cfg.RocketMQ.ConsumerGroup),
+		zap.String("metrics_addr", metricsServer.Addr),
 	)
 
 	stopSignal := make(chan os.Signal, 1)

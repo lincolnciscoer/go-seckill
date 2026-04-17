@@ -53,6 +53,8 @@ go run ./cmd/consumer
 - MySQL：`host.docker.internal:3306`
 - Redis：`host.docker.internal:6379`
 - RocketMQ Proxy：`host.docker.internal:8081`
+- Jaeger OTLP gRPC：`host.docker.internal:4317`
+- Consumer Metrics：`127.0.0.1:19090`
 
 这是为了兼容当前 Windows + Docker Desktop 环境。
 
@@ -92,6 +94,15 @@ GET /api/v1/orders/{orderNo}
 ```
 
 如果 consumer 正常消费，订单会被查到。
+
+## 验证可观测性
+
+- API Metrics：`http://127.0.0.1:8080/metrics`
+- API pprof：`http://127.0.0.1:8080/debug/pprof/`
+- Consumer Metrics：`http://127.0.0.1:19090/metrics`
+- Prometheus：`http://127.0.0.1:9090`
+- Grafana：`http://127.0.0.1:3000`
+- Jaeger：`http://127.0.0.1:16686`
 
 ## 停止本地依赖
 

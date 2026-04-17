@@ -8,6 +8,8 @@ coverage.*
 tmp/
 dist/
 bin/
+.go/
+.gocache/
 .idea/
 .vscode/
 .DS_Store

@@ -10,7 +10,11 @@ import (
 	"go-seckill/internal/cache"
 	"go-seckill/internal/model"
 	"go-seckill/internal/mq"
+	"go-seckill/internal/observability"
 	"go-seckill/internal/repository"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 var (
@@ -69,11 +73,18 @@ func NewSeckillService(
 }
 
 func (s *OrderService) GetByOrderNo(ctx context.Context, orderNo string) (*model.Order, error) {
+	ctx, span := observability.Tracer("go-seckill/order").Start(ctx, "order.get_by_order_no")
+	defer span.End()
+	span.SetAttributes(attribute.String("order.no", orderNo))
+
 	order, err := s.orders.GetByOrderNo(ctx, orderNo)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if order == nil {
+		span.SetStatus(codes.Error, ErrOrderNotFound.Error())
 		return nil, ErrOrderNotFound
 	}
 
@@ -86,6 +97,7 @@ func (s *OrderService) GetByOrderNo(ctx context.Context, orderNo string) (*model
 			UpdatedAt:  time.Now(),
 		})
 	}
+	observability.RecordOrderStatus("created")
 
 	return order, nil
 }
@@ -113,30 +125,54 @@ func (s *OrderService) GetStatus(ctx context.Context, orderNo string) (*cache.Or
 // Attempt 在数据库层直接完成库存扣减和订单创建。
 // 这是同步版秒杀闭环：简单、易理解，但高并发下数据库压力会较大，后面我们会用 Redis+Lua+MQ 继续演进。
 func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID uint64) (*SeckillAcceptedResult, error) {
+	ctx, span := observability.Tracer("go-seckill/seckill").Start(ctx, "seckill.attempt")
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int64("activity.id", int64(activityID)),
+		attribute.Int64("user.id", int64(userID)),
+	)
+
+	resultLabel := "unknown"
+	defer func() {
+		observability.RecordSeckillAttempt(resultLabel)
+	}()
+
 	activity, err := s.loadActivity(ctx, activityID)
 	if err != nil {
+		resultLabel = "load_error"
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if activity == nil {
+		resultLabel = "activity_not_found"
+		span.SetStatus(codes.Error, ErrActivityNotFound.Error())
 		return nil, ErrActivityNotFound
 	}
 
 	now := time.Now()
 	if activity.Status != 1 {
+		resultLabel = "inactive"
 		return nil, ErrActivityInactive
 	}
 	if now.Before(activity.StartTime) {
+		resultLabel = "not_started"
 		return nil, ErrActivityNotStarted
 	}
 	if now.After(activity.EndTime) {
+		resultLabel = "ended"
 		return nil, ErrActivityEnded
 	}
 
 	existingOrder, err := s.orders.GetByUserActivity(ctx, userID, activity.ID)
 	if err != nil {
+		resultLabel = "order_lookup_error"
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if existingOrder != nil {
+		resultLabel = "repeat"
 		return nil, ErrRepeatOrder
 	}
 
@@ -150,31 +186,43 @@ func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID 
 		case cache.SeckillAllowed:
 			// Redis 预扣成功，继续走数据库下单。
 		case cache.SeckillSoldOut:
+			resultLabel = "sold_out"
 			return nil, ErrSoldOut
 		case cache.SeckillRepeatOrder:
+			resultLabel = "repeat"
 			return nil, ErrRepeatOrder
 		case cache.SeckillActivityClosed:
+			resultLabel = "inactive"
 			return nil, ErrActivityInactive
 		case cache.SeckillNotStarted:
+			resultLabel = "not_started"
 			return nil, ErrActivityNotStarted
 		case cache.SeckillEnded:
+			resultLabel = "ended"
 			return nil, ErrActivityEnded
 		default:
+			resultLabel = "lua_error"
 			return nil, fmt.Errorf("unexpected redis seckill code: %d", attemptResult.Code)
 		}
 	} else if activity.AvailableStock <= 0 {
+		resultLabel = "sold_out"
 		return nil, ErrSoldOut
 	}
 
 	product, err := s.products.GetByID(ctx, activity.ProductID)
 	if err != nil {
+		resultLabel = "product_lookup_error"
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if product == nil {
+		resultLabel = "product_missing"
 		return nil, ErrProductMissing
 	}
 
 	if s.producer == nil {
+		resultLabel = "producer_missing"
 		return nil, fmt.Errorf("seckill order producer is not configured")
 	}
 
@@ -193,8 +241,12 @@ func (s *SeckillService) Attempt(ctx context.Context, userID uint64, activityID 
 		if s.cache != nil {
 			_ = s.cache.CompensateSeckill(ctx, activity.ID, userID)
 		}
+		resultLabel = "enqueue_error"
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
+	resultLabel = "queued"
 
 	return &SeckillAcceptedResult{
 		OrderNo:   orderNo,
@@ -284,6 +336,20 @@ func NewAsyncOrderService(
 }
 
 func (s *AsyncOrderService) HandleSeckillOrder(ctx context.Context, messageID string, payload *mq.SeckillOrderMessage) error {
+	ctx, span := observability.Tracer("go-seckill/consumer").Start(ctx, "mq.handle_seckill_order")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("message.id", messageID),
+		attribute.String("order.no", payload.OrderNo),
+		attribute.Int64("activity.id", int64(payload.ActivityID)),
+		attribute.Int64("user.id", int64(payload.UserID)),
+	)
+
+	resultLabel := "success"
+	defer func() {
+		observability.RecordMQConsume(resultLabel)
+	}()
+
 	_, err := s.orders.CreateSeckillOrder(ctx, repository.CreateSeckillOrderInput{
 		MessageID:  messageID,
 		OrderNo:    payload.OrderNo,
@@ -297,10 +363,15 @@ func (s *AsyncOrderService) HandleSeckillOrder(ctx context.Context, messageID st
 	if err != nil {
 		switch {
 		case errors.Is(err, repository.ErrDuplicateConsume):
+			resultLabel = "duplicate_consume"
 			return nil
 		case errors.Is(err, repository.ErrDuplicateOrder):
+			resultLabel = "duplicate_order"
 			return nil
 		default:
+			resultLabel = "error"
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 	}
@@ -318,6 +389,7 @@ func (s *AsyncOrderService) HandleSeckillOrder(ctx context.Context, messageID st
 			UpdatedAt:  time.Now(),
 		})
 	}
+	observability.RecordOrderStatus("created")
 
 	return nil
 }
@@ -327,6 +399,7 @@ func (s *SeckillService) markQueuedStatus(ctx context.Context, orderNo string, u
 		return nil
 	}
 
+	observability.RecordOrderStatus("queued")
 	return s.statusCache.Set(ctx, cache.OrderStatusPayload{
 		OrderNo:    orderNo,
 		UserID:     userID,

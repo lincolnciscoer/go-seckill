@@ -14,6 +14,7 @@
 8. Redis Lua 秒杀准入与库存预扣减
 9. RocketMQ 异步下单与消费幂等
 10. 限流、防重复提交与订单处理中状态
+11. Prometheus / Grafana / OpenTelemetry / pprof 可观测性
 
 ## 当前技术栈
 

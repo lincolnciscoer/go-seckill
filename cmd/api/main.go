@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"go-seckill/internal/cache"
 	"go-seckill/internal/config"
 	"go-seckill/internal/mq/rocketmq"
+	"go-seckill/internal/observability"
 	"go-seckill/internal/repository"
 	jwtmanager "go-seckill/internal/security/jwt"
 	"go-seckill/internal/service"
@@ -39,6 +41,14 @@ func main() {
 	}
 	defer func() {
 		_ = appLogger.Sync()
+	}()
+
+	traceShutdown, err := observability.SetupTracing(context.Background(), cfg.App.Name+"-api", cfg.Observability, appLogger)
+	if err != nil {
+		appLogger.Fatal("failed to initialize tracing", zap.Error(err))
+	}
+	defer func() {
+		_ = traceShutdown(context.Background())
 	}()
 
 	infra, err := bootstrap.InitInfrastructure(cfg, appLogger)
@@ -98,6 +108,7 @@ func buildRouter(
 	return router.NewEngine(router.Dependencies{
 		Config:          cfg,
 		Logger:          appLogger,
+		ServiceName:     cfg.App.Name + "-api",
 		HealthCheckers:  infra.HealthCheckers,
 		AuthService:     authService,
 		OrderService:    orderService,

@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: "go-seckill-api"
+    static_configs:
+      - targets:
+          - "host.docker.internal:8080"
+          - "host.docker.internal:18092"
+  - job_name: "go-seckill-consumer"
+    static_configs:
+      - targets:
+          - "host.docker.internal:19090"

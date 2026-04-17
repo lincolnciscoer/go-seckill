@@ -12,13 +12,14 @@ import (
 // Config 是整个应用启动时读取的顶层配置。
 // 这里先覆盖服务启动最需要的配置项，后面接数据库、Redis、MQ 时再继续往里扩展。
 type Config struct {
-	App      AppConfig      `yaml:"app"`
-	Server   ServerConfig   `yaml:"server"`
-	Log      LogConfig      `yaml:"log"`
-	JWT      JWTConfig      `yaml:"jwt"`
-	MySQL    MySQLConfig    `yaml:"mysql"`
-	Redis    RedisConfig    `yaml:"redis"`
-	RocketMQ RocketMQConfig `yaml:"rocketmq"`
+	App           AppConfig           `yaml:"app"`
+	Server        ServerConfig        `yaml:"server"`
+	Log           LogConfig           `yaml:"log"`
+	JWT           JWTConfig           `yaml:"jwt"`
+	MySQL         MySQLConfig         `yaml:"mysql"`
+	Redis         RedisConfig         `yaml:"redis"`
+	Observability ObservabilityConfig `yaml:"observability"`
+	RocketMQ      RocketMQConfig      `yaml:"rocketmq"`
 }
 
 type AppConfig struct {
@@ -90,6 +91,16 @@ type RocketMQConfig struct {
 	AwaitDuration     time.Duration `yaml:"await_duration" env:"GO_SECKILL_ROCKETMQ_AWAIT_DURATION" env-default:"5s"`
 	InvisibleDuration time.Duration `yaml:"invisible_duration" env:"GO_SECKILL_ROCKETMQ_INVISIBLE_DURATION" env-default:"20s"`
 	MaxMessageNum     int32         `yaml:"max_message_num" env:"GO_SECKILL_ROCKETMQ_MAX_MESSAGE_NUM" env-default:"16"`
+}
+
+type ObservabilityConfig struct {
+	MetricsPath      string  `yaml:"metrics_path" env:"GO_SECKILL_METRICS_PATH" env-default:"/metrics"`
+	ConsumerPort     int     `yaml:"consumer_port" env:"GO_SECKILL_OBSERVABILITY_CONSUMER_PORT" env-default:"19090"`
+	PprofEnabled     bool    `yaml:"pprof_enabled" env:"GO_SECKILL_PPROF_ENABLED" env-default:"true"`
+	TraceEnabled     bool    `yaml:"trace_enabled" env:"GO_SECKILL_TRACE_ENABLED" env-default:"true"`
+	TraceEndpoint    string  `yaml:"trace_endpoint" env:"GO_SECKILL_TRACE_ENDPOINT" env-default:"host.docker.internal:4317"`
+	TraceInsecure    bool    `yaml:"trace_insecure" env:"GO_SECKILL_TRACE_INSECURE" env-default:"true"`
+	TraceSampleRatio float64 `yaml:"trace_sample_ratio" env:"GO_SECKILL_TRACE_SAMPLE_RATIO" env-default:"1"`
 }
 
 // Load 负责按“配置文件 -> 环境变量覆盖”的顺序加载配置。

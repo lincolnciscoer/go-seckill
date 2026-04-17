@@ -29,6 +29,25 @@
 - Swagger
 - Docker Compose
 
+## 架构概览
+
+当前项目已经演进到这条核心链路：
+
+`Gin API -> Redis Lua 准入 -> RocketMQ 入队 -> Consumer 异步落库 -> MySQL 最终一致`
+
+配套能力包括：
+
+- JWT 鉴权
+- 活动预热与缓存化查询
+- 秒杀限流与重复提交保护
+- Prometheus / Grafana / Jaeger / pprof 可观测性
+
+## 压测与观测入口
+
+- 压测工具：`go run ./cmd/loadtest`
+- 性能报告：[docs/performance-report.md](C:/Users/TY/Desktop/tyai/go-seckill/docs/performance-report.md)
+- 本地运行说明：[docs/local-dev.md](C:/Users/TY/Desktop/tyai/go-seckill/docs/local-dev.md)
+
 ## 当前项目结构
 
 ```text

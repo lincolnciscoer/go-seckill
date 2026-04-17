@@ -31,12 +31,104 @@ definitions:
       message:
         type: string
     type: object
+  handler.LoginRequest:
+    properties:
+      password:
+        maxLength: 72
+        minLength: 6
+        type: string
+      username:
+        maxLength: 32
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  handler.RegisterRequest:
+    properties:
+      password:
+        maxLength: 72
+        minLength: 6
+        type: string
+      username:
+        maxLength: 32
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  response.Envelope:
+    properties:
+      code:
+        type: string
+      data: {}
+      message:
+        type: string
+    type: object
 info:
   contact: {}
   description: A step-by-step Go seckill backend project
   title: go-seckill API
   version: 0.1.0
 paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 登录请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: 用户登录
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 注册请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handler.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: 用户注册
+      tags:
+      - auth
+  /api/v1/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: 当前登录用户信息
+      tags:
+      - auth
   /healthz:
     get:
       description: 返回当前服务及其关键依赖的健康状态
@@ -54,4 +146,9 @@ paths:
       summary: 健康检查
       tags:
       - base
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

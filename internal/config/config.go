@@ -15,6 +15,7 @@ type Config struct {
 	App    AppConfig    `yaml:"app"`
 	Server ServerConfig `yaml:"server"`
 	Log    LogConfig    `yaml:"log"`
+	JWT    JWTConfig    `yaml:"jwt"`
 	MySQL  MySQLConfig  `yaml:"mysql"`
 	Redis  RedisConfig  `yaml:"redis"`
 }
@@ -35,6 +36,12 @@ type ServerConfig struct {
 type LogConfig struct {
 	Level       string `yaml:"level" env:"GO_SECKILL_LOG_LEVEL" env-default:"info"`
 	Development bool   `yaml:"development" env:"GO_SECKILL_LOG_DEVELOPMENT" env-default:"true"`
+}
+
+type JWTConfig struct {
+	Secret    string        `yaml:"secret" env:"GO_SECKILL_JWT_SECRET" env-default:"go-seckill-dev-secret"`
+	Issuer    string        `yaml:"issuer" env:"GO_SECKILL_JWT_ISSUER" env-default:"go-seckill"`
+	AccessTTL time.Duration `yaml:"access_ttl" env:"GO_SECKILL_JWT_ACCESS_TTL" env-default:"2h"`
 }
 
 type MySQLConfig struct {

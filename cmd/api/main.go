@@ -14,6 +14,9 @@ import (
 	"go-seckill/internal/config"
 	"go-seckill/internal/health"
 	mysqlstore "go-seckill/internal/store/mysql"
+	"go-seckill/internal/repository"
+	jwtmanager "go-seckill/internal/security/jwt"
+	"go-seckill/internal/service"
 	redisstore "go-seckill/internal/store/redis"
 	"go-seckill/internal/transport/http/router"
 	"go-seckill/pkg/logger"
@@ -27,6 +30,9 @@ import (
 // @version 0.1.0
 // @description A step-by-step Go seckill backend project
 // @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	cfg, err := config.Load(defaultConfigPath())
 	if err != nil {
@@ -49,10 +55,16 @@ func main() {
 	}
 	defer resources.Close()
 
+	userRepository := repository.NewGormUserRepository(resources.GormDB)
+	jwtManager := jwtmanager.NewManager(cfg.JWT)
+	authService := service.NewAuthService(userRepository, jwtManager)
+
 	engine := router.NewEngine(router.Dependencies{
 		Config:         cfg,
 		Logger:         appLogger,
 		HealthCheckers: resources.HealthCheckers,
+		AuthService:    authService,
+		JWTManager:     jwtManager,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

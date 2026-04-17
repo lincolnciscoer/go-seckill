@@ -8,6 +8,8 @@ import (
 
 	"go-seckill/internal/config"
 	"go-seckill/internal/health"
+	jwtmanager "go-seckill/internal/security/jwt"
+	"go-seckill/internal/service"
 	"go-seckill/internal/transport/http/handler"
 	"go-seckill/internal/transport/http/middleware"
 )
@@ -16,6 +18,8 @@ type Dependencies struct {
 	Config         *config.Config
 	Logger         *zap.Logger
 	HealthCheckers []health.Checker
+	AuthService    *service.AuthService
+	JWTManager     *jwtmanager.Manager
 }
 
 // NewEngine 负责集中管理 HTTP 路由注册。
@@ -37,6 +41,14 @@ func registerBaseRoutes(engine *gin.Engine, dep Dependencies) {
 	}
 
 	engine.GET("/healthz", handler.NewHealthHandler(serviceName, dep.HealthCheckers...))
+
+	if dep.AuthService != nil && dep.JWTManager != nil {
+		authHandler := handler.NewAuthHandler(dep.AuthService)
+		apiV1 := engine.Group("/api/v1")
+		apiV1.POST("/auth/register", authHandler.Register)
+		apiV1.POST("/auth/login", authHandler.Login)
+		apiV1.GET("/me", middleware.RequireAuth(dep.JWTManager), authHandler.Me)
+	}
 }
 
 func registerDocsRoutes(engine *gin.Engine) {

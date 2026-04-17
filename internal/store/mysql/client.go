@@ -4,18 +4,31 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"go-seckill/internal/config"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 const pingTimeout = 3 * time.Second
 
 func New(cfg config.MySQLConfig) (*gorm.DB, *sql.DB, error) {
-	gormDB, err := gorm.Open(mysql.Open(cfg.DSN()), &gorm.Config{})
+	gormDB, err := gorm.Open(mysql.Open(cfg.DSN()), &gorm.Config{
+		Logger: gormlogger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			gormlogger.Config{
+				SlowThreshold:             time.Second,
+				LogLevel:                  gormlogger.Warn,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+			},
+		),
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("open mysql with gorm: %w", err)
 	}

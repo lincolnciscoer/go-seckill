@@ -13,6 +13,11 @@ log:
   level: info
   development: true
 
+jwt:
+  secret: go-seckill-dev-secret
+  issuer: go-seckill
+  access_ttl: 2h
+
 mysql:
   host: host.docker.internal
   port: 3306

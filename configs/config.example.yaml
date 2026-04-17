@@ -1,2 +1,14 @@
+app:
+  name: go-seckill
+  env: dev
+
 server:
   port: 8080
+  read_timeout: 5s
+  write_timeout: 10s
+  idle_timeout: 30s
+  shutdown_timeout: 10s
+
+log:
+  level: info
+  development: true

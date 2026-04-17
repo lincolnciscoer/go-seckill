@@ -13,7 +13,7 @@ func TestHealth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	engine := gin.New()
-	engine.GET("/healthz", Health)
+	engine.GET("/healthz", NewHealthHandler("go-seckill"))
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	recorder := httptest.NewRecorder()
@@ -24,20 +24,28 @@ func TestHealth(t *testing.T) {
 		t.Fatalf("expected status code %d, got %d", http.StatusOK, recorder.Code)
 	}
 
-	var response HealthResponse
+	var response HealthSuccessResponse
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 
-	if response.Status != "ok" {
-		t.Fatalf("expected status to be ok, got %q", response.Status)
+	if response.Code != "OK" {
+		t.Fatalf("expected code to be OK, got %q", response.Code)
 	}
 
-	if response.Service != "go-seckill" {
-		t.Fatalf("expected service to be go-seckill, got %q", response.Service)
+	if response.Message != "success" {
+		t.Fatalf("expected message to be success, got %q", response.Message)
 	}
 
-	if response.Time.IsZero() {
+	if response.Data.Status != "ok" {
+		t.Fatalf("expected status to be ok, got %q", response.Data.Status)
+	}
+
+	if response.Data.Service != "go-seckill" {
+		t.Fatalf("expected service to be go-seckill, got %q", response.Data.Service)
+	}
+
+	if response.Data.Time.IsZero() {
 		t.Fatal("expected time to be populated")
 	}
 }

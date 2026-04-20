@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"go-seckill/internal/cache"
 	"go-seckill/internal/model"
 	"go-seckill/internal/repository"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -18,9 +20,11 @@ var (
 )
 
 type ActivityService struct {
-	products   repository.ProductRepository
-	activities repository.ActivityRepository
-	cache      *cache.ActivityCache
+	products    repository.ProductRepository
+	activities  repository.ActivityRepository
+	cache       *cache.ActivityCache
+	listGroup   singleflight.Group
+	detailGroup singleflight.Group
 }
 
 type CreateActivityInput struct {
@@ -89,15 +93,29 @@ func (s *ActivityService) List(ctx context.Context) ([]repository.ActivityView, 
 		}
 	}
 
-	activities, err := s.activities.List(ctx)
+	result, err, _ := s.listGroup.Do("activity:list", func() (any, error) {
+		if s.cache != nil {
+			if activities, hit, cacheErr := s.cache.GetActivityList(ctx); cacheErr == nil && hit {
+				return activities, nil
+			}
+		}
+
+		activities, queryErr := s.activities.List(ctx)
+		if queryErr != nil {
+			return nil, queryErr
+		}
+
+		if s.cache != nil {
+			_ = s.cache.SetActivityList(ctx, activities)
+		}
+
+		return activities, nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	if s.cache != nil {
-		_ = s.cache.SetActivityList(ctx, activities)
-	}
-
+	activities := cloneActivityViews(result.([]repository.ActivityView))
 	s.applyStockSnapshot(ctx, activities)
 	return activities, nil
 }
@@ -105,23 +123,47 @@ func (s *ActivityService) List(ctx context.Context) ([]repository.ActivityView, 
 func (s *ActivityService) GetByID(ctx context.Context, activityID uint64) (*repository.ActivityView, error) {
 	if s.cache != nil {
 		if activity, hit, err := s.cache.GetActivityDetail(ctx, activityID); err == nil && hit {
+			if activity == nil {
+				return nil, ErrActivityNotFound
+			}
 			s.applyActivityStock(ctx, activity)
 			return activity, nil
 		}
 	}
 
-	activity, err := s.activities.GetByID(ctx, activityID)
+	result, err, _ := s.detailGroup.Do(fmt.Sprintf("activity:%d", activityID), func() (any, error) {
+		if s.cache != nil {
+			if activity, hit, cacheErr := s.cache.GetActivityDetail(ctx, activityID); cacheErr == nil && hit {
+				return activity, nil
+			}
+		}
+
+		activity, queryErr := s.activities.GetByID(ctx, activityID)
+		if queryErr != nil {
+			return nil, queryErr
+		}
+		if activity == nil {
+			if s.cache != nil {
+				_ = s.cache.SetActivityEmpty(ctx, activityID)
+			}
+			return nil, nil
+		}
+
+		if s.cache != nil {
+			_ = s.cache.SetActivityDetail(ctx, *activity)
+		}
+
+		return activity, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if activity == nil {
+
+	if result == nil {
 		return nil, ErrActivityNotFound
 	}
 
-	if s.cache != nil {
-		_ = s.cache.SetActivityDetail(ctx, *activity)
-	}
-
+	activity := cloneActivityView(result.(*repository.ActivityView))
 	s.applyActivityStock(ctx, activity)
 	return activity, nil
 }
@@ -169,4 +211,23 @@ func (s *ActivityService) applyActivityStock(ctx context.Context, activity *repo
 	if activity.TotalStock >= stock {
 		activity.SoldStock = activity.TotalStock - stock
 	}
+}
+
+func cloneActivityView(activity *repository.ActivityView) *repository.ActivityView {
+	if activity == nil {
+		return nil
+	}
+
+	cloned := *activity
+	return &cloned
+}
+
+func cloneActivityViews(activities []repository.ActivityView) []repository.ActivityView {
+	if activities == nil {
+		return nil
+	}
+
+	cloned := make([]repository.ActivityView, len(activities))
+	copy(cloned, activities)
+	return cloned
 }

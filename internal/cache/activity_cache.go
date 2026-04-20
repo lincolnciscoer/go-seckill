@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"strconv"
 	"time"
 
@@ -16,7 +17,11 @@ const (
 	activityListKeyPrefix   = "seckill:activity:list"
 	activityDetailKeyPrefix = "seckill:activity:"
 	activityStockKeyPrefix  = "seckill:stock:"
+	activityEmptyMarker     = "__nil__"
 	defaultCacheTTL         = 10 * time.Minute
+	defaultCacheTTLJitter   = 2 * time.Minute
+	emptyCacheTTL           = 1 * time.Minute
+	emptyCacheTTLJitter     = 30 * time.Second
 )
 
 type ActivityCache struct {
@@ -58,7 +63,7 @@ func (c *ActivityCache) SetActivityList(ctx context.Context, activities []reposi
 		return err
 	}
 
-	return c.client.Set(ctx, activityListKeyPrefix, payload, c.ttl).Err()
+	return c.client.Set(ctx, activityListKeyPrefix, payload, ttlWithJitter(c.ttl, defaultCacheTTLJitter)).Err()
 }
 
 func (c *ActivityCache) GetActivityDetail(ctx context.Context, activityID uint64) (*repository.ActivityView, bool, error) {
@@ -68,6 +73,10 @@ func (c *ActivityCache) GetActivityDetail(ctx context.Context, activityID uint64
 	}
 	if err != nil {
 		return nil, false, err
+	}
+
+	if value == activityEmptyMarker {
+		return nil, true, nil
 	}
 
 	var activity repository.ActivityView
@@ -84,11 +93,22 @@ func (c *ActivityCache) SetActivityDetail(ctx context.Context, activity reposito
 		return err
 	}
 
-	if err := c.client.Set(ctx, activityDetailKey(activity.ID), payload, c.ttl).Err(); err != nil {
+	if err := c.client.Set(ctx, activityDetailKey(activity.ID), payload, ttlWithJitter(c.ttl, defaultCacheTTLJitter)).Err(); err != nil {
 		return err
 	}
 
-	return c.client.Set(ctx, activityStockKey(activity.ID), activity.AvailableStock, c.ttl).Err()
+	return c.client.Set(ctx, activityStockKey(activity.ID), activity.AvailableStock, ttlWithJitter(c.ttl, defaultCacheTTLJitter)).Err()
+}
+
+// SetActivityEmpty 用于缓存“不存在的活动”。
+// 这样对于大量访问不存在 activityId 的请求，就不会每次都穿透到数据库。
+func (c *ActivityCache) SetActivityEmpty(ctx context.Context, activityID uint64) error {
+	return c.client.Set(
+		ctx,
+		activityDetailKey(activityID),
+		activityEmptyMarker,
+		ttlWithJitter(emptyCacheTTL, emptyCacheTTLJitter),
+	).Err()
 }
 
 func (c *ActivityCache) InvalidateActivity(ctx context.Context, activityID uint64) error {
@@ -123,4 +143,12 @@ func activityDetailKey(activityID uint64) string {
 
 func activityStockKey(activityID uint64) string {
 	return fmt.Sprintf("%s%d", activityStockKeyPrefix, activityID)
+}
+
+func ttlWithJitter(base time.Duration, jitter time.Duration) time.Duration {
+	if jitter <= 0 {
+		return base
+	}
+
+	return base + time.Duration(rand.Int64N(int64(jitter)+1))
 }

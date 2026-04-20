@@ -15,6 +15,8 @@
 9. RocketMQ 异步下单与消费幂等
 10. 限流、防重复提交与订单处理中状态
 11. Prometheus / Grafana / OpenTelemetry / pprof 可观测性
+12. 压测工具、性能报告与展示材料
+13. 热点缓存治理：穿透、击穿、雪崩
 
 ## 当前技术栈
 
@@ -39,6 +41,7 @@
 
 - JWT 鉴权
 - 活动预热与缓存化查询
+- 空值缓存、TTL 随机抖动、`singleflight` 热点重建保护
 - 秒杀限流与重复提交保护
 - Prometheus / Grafana / Jaeger / pprof 可观测性
 
